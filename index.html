@@ -76,7 +76,10 @@
 
       // Check if explicitly wants the app (query param bypass)
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('source') === 'pwa' || urlParams.get('app') === 'true') {
+      // Also check if the path is just the base path (from PWA install)
+      const isBasePath = window.location.pathname === '/agent-pwa/' || window.location.pathname === '/agent-pwa';
+      
+      if (urlParams.get('source') === 'pwa' || urlParams.get('app') === 'true' || isBasePath) {
         console.log('[PWA] Direct app request - loading Flutter');
         window.PWA_CONFIG.loadFlutter = true;
         return;
@@ -150,13 +153,15 @@
   <script>
     if (window.PWA_CONFIG.loadFlutter) {
       console.log('[PWA] Loading Flutter bootstrap...');
+      console.log('[PWA] Current location:', window.location.href);
+      console.log('[PWA] Base URL:', document.querySelector('base').href);
       
-      // Force update service worker if needed
+      // UNREGISTER ALL SERVICE WORKERS (temporary debug)
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
           registrations.forEach(registration => {
-            console.log('[PWA] Updating service worker...');
-            registration.update();
+            console.log('[PWA] UNREGISTERING service worker...');
+            registration.unregister();
           });
         });
       }
@@ -165,6 +170,14 @@
       var script = document.createElement('script');
       script.src = 'flutter_bootstrap.js';
       script.async = true;
+      script.onerror = function() {
+        console.error('[PWA] FAILED to load flutter_bootstrap.js');
+        console.error('[PWA] Tried to load from:', script.src);
+        document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;"><h2>Debug Info</h2><p>Failed to load: ' + script.src + '</p><p>Base: ' + document.querySelector('base').href + '</p><p>Location: ' + window.location.href + '</p></div>';
+      };
+      script.onload = function() {
+        console.log('[PWA] flutter_bootstrap.js loaded successfully!');
+      };
       document.body.appendChild(script);
     } else {
       console.log('[PWA] Flutter bootstrap skipped');
