@@ -65,54 +65,102 @@
     const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.myagent.app";
     const SITE_URL = "https://app.myagent.africa";
 
-    // platform detection helpers
-    function isAndroid() {
-      return /Android/i.test(navigator.userAgent);
-    }
-    function isiOS() {
-      return /iPhone|iPad|iPod/i.test(navigator.userAgent)
-        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS on desktop UA
-    }
-    function isMobile() {
-      return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    }
+     const TARGET_DOMAIN = ""; // set to "https://app.myagent.africa" when you switch to production
+  const GH_PAGES_BASE = "/agent-pwa/"; // keep for testing on your GitHub Pages repo
 
-    // Called on page load
-    (function branchByPlatform() {
-      // If PWA already installed on iOS, navigator.standalone is true
-      if (isiOS()) {
-        // show custom iOS instructions (no auto prompt exists for iOS)
-        document.getElementById("ios-install").classList.remove("hidden");
-      } else if (isAndroid()) {
-        // redirect Android users to Play Store
-        // show a fallback link quickly then redirect
-        const androidDiv = document.getElementById("android-redirect");
-        androidDiv.classList.remove("hidden");
-        const link = document.getElementById("play-store-link");
-        link.href = PLAY_STORE_URL;
-        // Redirect after a tiny delay so user sees message briefly
-        setTimeout(() => { window.location.href = PLAY_STORE_URL; }, 300);
-      } else if (!isMobile()) {
-        // Desktop - show QR that links to SITE_URL
-        const desktop = document.getElementById("desktop");
-        desktop.classList.remove("hidden");
-        // generate QR via a public API. You can replace with your own QR generator service
-        const qr = document.getElementById("qr-img");
-        qr.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(SITE_URL);
-        qr.onclick = () => window.open(SITE_URL, "_blank");
-      } else {
-        document.getElementById("fallback").classList.remove("hidden");
+  // Helpers
+  function isAndroid() {
+    return /Android/i.test(navigator.userAgent);
+  }
+  function isiOS() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  function isMobile() {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
+
+  function isInStandaloneMode() {
+    // iOS legacy navigator.standalone + modern display-mode media query
+    return (('standalone' in navigator && navigator.standalone)
+      || window.matchMedia('(display-mode: standalone)').matches);
+  }
+
+  // When the app is installed and launched from home screen, force the app to use the canonical root.
+  // This avoids "opened at a specific path" behavior that can happen with Add to Home Screen.
+  // Only redirect if TARGET_DOMAIN is set. Use it when you switch to app.myagent.africa.
+  function ensureCanonicalOnStandalone() {
+    if (!isInStandaloneMode()) return;
+    if (!TARGET_DOMAIN) return; // no redirect during testing
+    try {
+      const current = window.location.href;
+      const target = TARGET_DOMAIN.replace(/\/$/, '') + '/';
+      if (!current.startsWith(target)) {
+        // Use replace to avoid leaving history entry
+        window.location.replace(target);
       }
-    })();
-
-    // Service worker registration for PWA caching and offline
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch(err => {
-          console.warn('SW register failed', err);
-        });
-      });
+    } catch (e) {
+      console.warn('canonical redirect failed', e);
     }
-  </script>
+  }
+
+  (function branchByPlatform() {
+    // If already running as an installed app, do the canonical redirect check then show app
+    if (isInStandaloneMode()) {
+      ensureCanonicalOnStandalone();
+      // show app UI (do nothing or initialize your app)
+      // For your test page this means hide all instruction sections and show the real app content
+      document.getElementById('ios-install')?.classList.add('hidden');
+      document.getElementById('android-redirect')?.classList.add('hidden');
+      document.getElementById('desktop')?.classList.add('hidden');
+      document.getElementById('fallback')?.classList.remove('hidden'); // or swap in your app shell
+      return;
+    }
+
+    // Not installed yet, show relevant prompts/redirects
+    if (isiOS()) {
+      // show custom iOS instructions
+      document.getElementById('ios-install')?.classList.remove('hidden');
+      return;
+    }
+
+    if (isAndroid()) {
+      // redirect Android users to Play Store (or you could show beforeinstallprompt handler)
+      const androidDiv = document.getElementById('android-redirect');
+      androidDiv?.classList.remove('hidden');
+      const link = document.getElementById('play-store-link');
+      link.href = "https://play.google.com/store/apps/details?id=com.myagent.app"; // update package id
+      setTimeout(() => { window.location.href = link.href; }, 300);
+      return;
+    }
+
+    // Desktop
+    if (!isMobile()) {
+      const desktop = document.getElementById('desktop');
+      desktop?.classList.remove('hidden');
+      const qr = document.getElementById('qr-img');
+      // Use the production URL if set, otherwise use GH pages path for testing
+      const siteUrl = TARGET_DOMAIN || (window.location.origin + GH_PAGES_BASE);
+      qr.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(siteUrl);
+      qr.onclick = () => window.open(siteUrl, "_blank");
+      return;
+    }
+
+    // Fallback
+    document.getElementById('fallback')?.classList.remove('hidden');
+  })();
+
+  // Register service worker if available
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const swPath = (typeof GH_PAGES_BASE === 'string' && GH_PAGES_BASE && !TARGET_DOMAIN)
+        ? GH_PAGES_BASE + 'sw.js' // testing on GH pages
+        : '/sw.js';
+      navigator.serviceWorker.register(swPath).catch(err => {
+        console.warn('SW register failed', err);
+      });
+    });
+  }
+</script>
 </body>
 </html>
