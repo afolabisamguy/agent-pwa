@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MyAgent</title>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Theme color -->
+  <meta name="theme-color" content="#0b6efd" />
+
+  <!-- Apple meta for iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="MyAgent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin:0; padding:24px; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f6f7fb; color:#111 }
+    .card { max-width:720px; width:100%; background:white; padding:28px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.08) }
+    .hidden { display:none }
+    .btn { display:inline-block; padding:10px 14px; border-radius:8px; text-decoration:none; background:#0b6efd; color:white }
+    img.qr { width:160px; height:160px; margin-top:12px }
+    .steps { margin-top:12px; line-height:1.5 }
+  </style>
+</head>
+<body>
+  <div class="card" id="main-card">
+    <!-- iOS instructions -->
+    <div id="ios-install" class="hidden">
+      <h2>Install MyAgent on your iPhone</h2>
+      <p class="steps">
+        1. Tap the Share button in Safari (the square with an arrow).<br />
+        2. Select Add to Home Screen.<br />
+        3. Tap Add. MyAgent will appear on your home screen like a native app.
+      </p>
+      <p>Note: If you already added it, open it from your home screen.</p>
+    </div>
+
+    <!-- Android redirect fallback (will redirect automatically) -->
+    <div id="android-redirect" class="hidden">
+      <h2>Opening Play Store</h2>
+      <p>If you are not redirected, <a id="play-store-link" class="btn" href="#">Open Play Store</a></p>
+    </div>
+
+    <!-- Desktop / other browsers -->
+    <div id="desktop" class="hidden">
+      <h2>Open MyAgent on your phone</h2>
+      <p>Scan this QR code with your phone camera to open the app page or Play Store.</p>
+      <img id="qr-img" class="qr" alt="QR code" src="" />
+      <p style="margin-top:12px">Or open <a href="https://app.myagent.africa">https://app.myagent.africa</a> on your phone</p>
+    </div>
+
+    <!-- Optional: Everything else / fallback UI -->
+    <div id="fallback" class="hidden">
+      <h2>Welcome to MyAgent</h2>
+      <p>We detected an unsupported environment. Try opening on your phone for the best experience.</p>
+    </div>
+  </div>
+
+  <script>
+    // config - replace with your real links
+    const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.myagent.app";
+    const SITE_URL = "https://app.myagent.africa";
+
+    // platform detection helpers
+    function isAndroid() {
+      return /Android/i.test(navigator.userAgent);
+    }
+    function isiOS() {
+      return /iPhone|iPad|iPod/i.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS on desktop UA
+    }
+    function isMobile() {
+      return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+
+    // Called on page load
+    (function branchByPlatform() {
+      // If PWA already installed on iOS, navigator.standalone is true
+      if (isiOS()) {
+        // show custom iOS instructions (no auto prompt exists for iOS)
+        document.getElementById("ios-install").classList.remove("hidden");
+      } else if (isAndroid()) {
+        // redirect Android users to Play Store
+        // show a fallback link quickly then redirect
+        const androidDiv = document.getElementById("android-redirect");
+        androidDiv.classList.remove("hidden");
+        const link = document.getElementById("play-store-link");
+        link.href = PLAY_STORE_URL;
+        // Redirect after a tiny delay so user sees message briefly
+        setTimeout(() => { window.location.href = PLAY_STORE_URL; }, 300);
+      } else if (!isMobile()) {
+        // Desktop - show QR that links to SITE_URL
+        const desktop = document.getElementById("desktop");
+        desktop.classList.remove("hidden");
+        // generate QR via a public API. You can replace with your own QR generator service
+        const qr = document.getElementById("qr-img");
+        qr.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(SITE_URL);
+        qr.onclick = () => window.open(SITE_URL, "_blank");
+      } else {
+        document.getElementById("fallback").classList.remove("hidden");
+      }
+    })();
+
+    // Service worker registration for PWA caching and offline
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.warn('SW register failed', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
