@@ -2,12 +2,12 @@
   "name": "MyAgent",
   "short_name": "MyAgent",
   "description": "Your AI Assistant",
-  "start_url": "/agent-pwa/",
+  "start_url": "/?source=pwa",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0b6efd",
   "orientation": "portrait-primary",
-  "scope": "/agent-pwa/",
+  "scope": "/",
   "icons": [
     {
       "src": "icons/192.png",
