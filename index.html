@@ -150,6 +150,17 @@
   <script>
     if (window.PWA_CONFIG.loadFlutter) {
       console.log('[PWA] Loading Flutter bootstrap...');
+      
+      // Force update service worker if needed
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(registration => {
+            console.log('[PWA] Updating service worker...');
+            registration.update();
+          });
+        });
+      }
+      
       // Dynamically load flutter_bootstrap.js
       var script = document.createElement('script');
       script.src = 'flutter_bootstrap.js';

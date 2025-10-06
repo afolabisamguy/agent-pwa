@@ -1,14 +1,12 @@
 // Service Worker for MyAgent PWA
-const CACHE_NAME = 'myagent-v1';
+const CACHE_NAME = 'myagent-v2'; // Changed version to force update
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/flutter.js',
-  '/favicon.png',
-  '/icons/192.png',
-  '/icons/512.png',
-  '/icons/maskable.png'
+  '/agent-pwa/',
+  '/agent-pwa/index.html',
+  '/agent-pwa/manifest.json',
+  '/agent-pwa/flutter_bootstrap.js', // Fixed: was flutter.js
+  '/agent-pwa/favicon.png'
+  // Don't precache icons as they might not exist yet
 ];
 
 // Install event - cache core assets
@@ -52,6 +50,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Skip Chrome extension requests
+  if (event.request.url.includes('chrome-extension://')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(cachedResponse => {
@@ -62,7 +65,7 @@ self.addEventListener('fetch', event => {
 
         console.log('[SW] Fetching from network:', event.request.url);
         return fetch(event.request).then(response => {
-          // Cache successful responses
+          // Only cache successful responses (not 404s or errors)
           if (response && response.status === 200 && response.type === 'basic') {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then(cache => {
@@ -70,12 +73,14 @@ self.addEventListener('fetch', event => {
             });
           }
           return response;
+        }).catch(err => {
+          console.error('[SW] Fetch failed:', err);
+          // Return a basic offline response for navigation requests
+          if (event.request.mode === 'navigate') {
+            return caches.match('/agent-pwa/index.html');
+          }
+          throw err;
         });
-      })
-      .catch(err => {
-        console.error('[SW] Fetch failed:', err);
-        // You could return a custom offline page here
-        throw err;
       })
   );
 });
