@@ -27,7 +27,7 @@
   <style>
     body { 
       margin: 0; 
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Monaco, monospace; 
       background: #f6f7fb;
     }
     #install-page { 
@@ -97,6 +97,8 @@
       transform: translate(-50%, -50%); 
       text-align: center;
       color: #0b6efd;
+      width: 90%;
+      max-width: 400px;
     }
     #loading.active { display: block; }
     .spinner {
@@ -112,10 +114,51 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    #debug-info {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.9);
+      color: #0f0;
+      padding: 16px;
+      font-size: 11px;
+      max-height: 40vh;
+      overflow: auto;
+      font-family: Monaco, monospace;
+      z-index: 99998;
+    }
+    #debug-info.active { display: block; }
+    #debug-toggle {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      z-index: 99999;
+      cursor: pointer;
+    }
+    .debug-line { margin: 4px 0; }
+    .debug-error { color: #f00; }
+    .debug-success { color: #0f0; }
+    .debug-warning { color: #ff0; }
   </style>
 
   <!-- PRE-FLUTTER LOGIC: Detect platform and installation status -->
   <script>
+    // Debug logger
+    window.DEBUG_LOGS = [];
+    function debugLog(msg, type = 'info') {
+      const timestamp = new Date().toISOString().substr(11, 8);
+      window.DEBUG_LOGS.push({ msg, type, timestamp });
+      console.log(`[PWA ${timestamp}]`, msg);
+    }
+
     (function() {
       const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.myagent.app";
       
@@ -133,8 +176,10 @@
       }
 
       function isInStandaloneMode() {
-        return window.matchMedia('(display-mode: standalone)').matches
+        const standalone = window.matchMedia('(display-mode: standalone)').matches
           || window.navigator.standalone === true;
+        debugLog(`Standalone check: ${standalone}`, standalone ? 'success' : 'info');
+        return standalone;
       }
 
       // Determine what to show
@@ -145,23 +190,31 @@
         redirectPlayStore: false
       };
 
-      console.log('[PWA] Detection started');
-      console.log('[PWA] User Agent:', navigator.userAgent);
-      console.log('[PWA] Standalone mode:', isInStandaloneMode());
-      console.log('[PWA] Location:', window.location.href);
+      debugLog('=== PWA Detection Started ===', 'warning');
+      debugLog(`User Agent: ${navigator.userAgent}`);
+      debugLog(`Location: ${window.location.href}`);
+      debugLog(`Pathname: ${window.location.pathname}`);
+      debugLog(`Search: ${window.location.search}`);
+      debugLog(`Hostname: ${window.location.hostname}`);
+      debugLog(`Display Mode: ${window.matchMedia('(display-mode: standalone)').matches ? 'standalone' : 'browser'}`);
+      debugLog(`iOS Standalone: ${window.navigator.standalone}`);
+      debugLog(`Is Mobile: ${isMobile()}`);
+      debugLog(`Is iOS: ${isiOS()}`);
+      debugLog(`Is Android: ${isAndroid()}`);
 
       // PRIORITY 1: If already installed (standalone mode), ALWAYS load Flutter
       if (isInStandaloneMode()) {
-        console.log('[PWA] ✓ Running in standalone mode - loading Flutter');
+        debugLog('✓ MATCH: Running in standalone mode - loading Flutter', 'success');
         window.PWA_CONFIG.loadFlutter = true;
         return;
       }
 
       // PRIORITY 2: Check if restored from 404 redirect
       const wasRedirected = sessionStorage.getItem('redirect');
+      debugLog(`Session redirect: ${wasRedirected || 'none'}`);
       if (wasRedirected) {
         sessionStorage.removeItem('redirect');
-        console.log('[PWA] ✓ Restored from redirect - loading Flutter');
+        debugLog('✓ MATCH: Restored from redirect - loading Flutter', 'success');
         window.PWA_CONFIG.loadFlutter = true;
         return;
       }
@@ -170,23 +223,24 @@
       const urlParams = new URLSearchParams(window.location.search);
       const hasAppParam = urlParams.get('source') === 'pwa' || 
                           urlParams.get('app') === 'true';
+      debugLog(`URL has app param: ${hasAppParam}`);
       
       if (hasAppParam) {
-        console.log('[PWA] ✓ App parameter detected - loading Flutter');
+        debugLog('✓ MATCH: App parameter detected - loading Flutter', 'success');
         window.PWA_CONFIG.loadFlutter = true;
         return;
       }
 
-      // PRIORITY 4: Check if path indicates direct access (for PWA installs)
+      // PRIORITY 4: Check if path indicates direct access
       const pathname = window.location.pathname;
-      const isBasePath = pathname === '/' || 
-                         pathname === '/index.html';
+      const isBasePath = pathname === '/' || pathname === '/index.html';
+      debugLog(`Is base path: ${isBasePath}`);
       
       // If it's base path AND mobile, show appropriate action
       if (isBasePath && isMobile()) {
         // Not installed yet - check platform
         if (isAndroid()) {
-          console.log('[PWA] Android mobile detected - redirecting to Play Store');
+          debugLog('✓ MATCH: Android mobile - redirecting to Play Store', 'warning');
           window.PWA_CONFIG.redirectPlayStore = true;
           setTimeout(() => {
             window.location.href = PLAY_STORE_URL;
@@ -195,7 +249,7 @@
         }
 
         if (isiOS()) {
-          console.log('[PWA] iOS mobile detected - showing install instructions');
+          debugLog('✓ MATCH: iOS mobile - showing install instructions', 'warning');
           window.PWA_CONFIG.showIOSInstall = true;
           return;
         }
@@ -203,22 +257,31 @@
 
       // PRIORITY 5: Desktop
       if (!isMobile()) {
-        console.log('[PWA] Desktop detected - showing QR code');
+        debugLog('✓ MATCH: Desktop - showing QR code', 'warning');
         window.PWA_CONFIG.showDesktop = true;
         return;
       }
 
       // Default fallback: load Flutter
-      console.log('[PWA] Default fallback - loading Flutter');
+      debugLog('✓ MATCH: Default fallback - loading Flutter', 'success');
       window.PWA_CONFIG.loadFlutter = true;
     })();
   </script>
 </head>
 <body>
+  <!-- Debug Toggle Button -->
+  <button id="debug-toggle" onclick="document.getElementById('debug-info').classList.toggle('active')">
+    🐛 Debug
+  </button>
+
+  <!-- Debug Info Panel -->
+  <div id="debug-info"></div>
+
   <!-- Loading indicator -->
   <div id="loading">
     <div class="spinner"></div>
     <p>Loading MyAgent...</p>
+    <p style="font-size: 12px; color: #666;">Tap 🐛 Debug below for details</p>
   </div>
 
   <!-- Install/Redirect Page -->
@@ -227,6 +290,18 @@
   </div>
 
   <script>
+    // Render debug logs
+    function renderDebugLogs() {
+      const debugDiv = document.getElementById('debug-info');
+      debugDiv.innerHTML = window.DEBUG_LOGS.map(log => {
+        const className = `debug-line debug-${log.type}`;
+        return `<div class="${className}">[${log.timestamp}] ${log.msg}</div>`;
+      }).join('');
+    }
+
+    // Update debug logs every second
+    setInterval(renderDebugLogs, 1000);
+
     // Show install page immediately if needed
     (function() {
       const installPage = document.getElementById('install-page');
@@ -245,6 +320,7 @@
           <p class="note">✨ After installing, open MyAgent from your home screen to start using the app.</p>
         `;
         installPage.classList.add('active');
+        debugLog('Showing iOS install instructions', 'success');
       } else if (window.PWA_CONFIG.showDesktop) {
         const currentUrl = window.location.href;
         const qrUrl = currentUrl.includes('?') ? currentUrl : currentUrl + '?source=pwa';
@@ -256,6 +332,7 @@
           <p class="note">💡 Tip: After opening on your phone, you can install it as an app!</p>
         `;
         installPage.classList.add('active');
+        debugLog('Showing desktop QR code', 'success');
       } else if (window.PWA_CONFIG.redirectPlayStore) {
         installContent.innerHTML = `
           <h2>📱 Redirecting...</h2>
@@ -263,6 +340,7 @@
           <div class="spinner" style="margin: 20px auto;"></div>
         `;
         installPage.classList.add('active');
+        debugLog('Redirecting to Play Store', 'warning');
       }
     })();
   </script>
@@ -270,9 +348,8 @@
   <!-- Load Flutter bootstrap ONLY if we should load the app -->
   <script>
     if (window.PWA_CONFIG.loadFlutter) {
-      console.log('[PWA] ✓ Loading Flutter bootstrap...');
-      console.log('[PWA] Current location:', window.location.href);
-      console.log('[PWA] Base URL:', document.querySelector('base').href);
+      debugLog('=== Loading Flutter ===', 'warning');
+      debugLog(`Base href: ${document.querySelector('base').href}`);
       
       // Show loading indicator
       document.getElementById('loading').classList.add('active');
@@ -283,30 +360,31 @@
       script.async = true;
       
       script.onerror = function() {
-        console.error('[PWA] ✗ FAILED to load flutter_bootstrap.js');
-        console.error('[PWA] Tried to load from:', script.src);
+        debugLog('✗ FAILED to load flutter_bootstrap.js', 'error');
+        debugLog(`Script src attempted: ${script.src}`, 'error');
         document.getElementById('loading').innerHTML = `
           <div style="padding:20px;font-family:sans-serif;text-align:center;">
-            <h2 style="color:#dc3545;">Failed to Load App</h2>
-            <p>Could not load flutter_bootstrap.js</p>
-            <p style="font-size:14px;color:#666;">
-              Base: ${document.querySelector('base').href}<br/>
-              Location: ${window.location.href}<br/>
-              Script: ${script.src}
-            </p>
-            <button onclick="location.reload()" style="margin-top:20px;padding:10px 20px;background:#0b6efd;color:white;border:none;border-radius:6px;cursor:pointer;">Retry</button>
+            <h2 style="color:#dc3545;">❌ Failed to Load</h2>
+            <p><strong>flutter_bootstrap.js not found</strong></p>
+            <div style="background:#f8f9fa;padding:12px;border-radius:8px;margin:16px 0;font-size:12px;text-align:left;">
+              <div>Script: ${script.src}</div>
+              <div>Base: ${document.querySelector('base').href}</div>
+              <div>Location: ${window.location.href}</div>
+            </div>
+            <button onclick="location.reload()" style="margin-top:12px;padding:10px 20px;background:#0b6efd;color:white;border:none;border-radius:6px;cursor:pointer;font-size:16px;">🔄 Retry</button>
+            <p style="font-size:12px;color:#666;margin-top:12px;">Tap 🐛 Debug for more info</p>
           </div>
         `;
       };
       
       script.onload = function() {
-        console.log('[PWA] ✓ flutter_bootstrap.js loaded successfully!');
-        // Loading indicator will be hidden by Flutter when ready
+        debugLog('✓ flutter_bootstrap.js loaded successfully!', 'success');
       };
       
+      debugLog('Appending flutter_bootstrap.js script tag');
       document.body.appendChild(script);
     } else {
-      console.log('[PWA] Flutter bootstrap skipped (showing install/redirect page)');
+      debugLog('Flutter bootstrap skipped - showing alternative UI', 'info');
     }
   </script>
 </body>
