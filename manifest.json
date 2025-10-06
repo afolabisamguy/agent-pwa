@@ -10,25 +10,25 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/agent-pwa/icons/192.png",
+      "src": "icons/192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/agent-pwa/icons/512.png",
+      "src": "icons/512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/agent-pwa/icons/maskable.png",
+      "src": "icons/maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/agent-pwa/icons/apple-touch-icon.png",
+      "src": "icons/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png"
     }
