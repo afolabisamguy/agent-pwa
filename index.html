@@ -1,166 +1,79 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MyAgent</title>
+}
 
-  <!-- PWA manifest -->
-  <link rel="manifest" href="/manifest.json" />
 
-  <!-- Theme color -->
-  <meta name="theme-color" content="#0b6efd" />
+// Redirect to canonical domain when launched as standalone - only if TARGET_DOMAIN set
+function ensureCanonicalOnStandalone() {
+if (!isInStandaloneMode()) return;
+if (!TARGET_DOMAIN) return; // no redirect during testing
+try {
+const current = window.location.href;
+const target = TARGET_DOMAIN.replace(/\/$/, '') + '/';
+if (!current.startsWith(target)) {
+window.location.replace(target);
+}
+} catch (e) {
+console.warn('canonical redirect failed', e);
+}
+}
 
-  <!-- Apple meta for iOS -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-title" content="MyAgent" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 
-  <style>
-    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin:0; padding:24px; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f6f7fb; color:#111 }
-    .card { max-width:720px; width:100%; background:white; padding:28px; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.08) }
-    .hidden { display:none }
-    .btn { display:inline-block; padding:10px 14px; border-radius:8px; text-decoration:none; background:#0b6efd; color:white }
-    img.qr { width:160px; height:160px; margin-top:12px }
-    .steps { margin-top:12px; line-height:1.5 }
-  </style>
-</head>
-<body>
-  <div class="card" id="main-card">
-    <!-- iOS instructions -->
-    <div id="ios-install" class="hidden">
-      <h2>Install MyAgent on your iPhone</h2>
-      <p class="steps">
-        1. Tap the Share button in Safari (the square with an arrow).<br />
-        2. Select Add to Home Screen.<br />
-        3. Tap Add. MyAgent will appear on your home screen like a native app.
-      </p>
-      <p>Note: If you already added it, open it from your home screen.</p>
-    </div>
+(function branchByPlatform() {
+// If already running as an installed app, show app shell and optionally redirect
+if (isInStandaloneMode()) {
+ensureCanonicalOnStandalone();
+document.getElementById('ios-install')?.classList.add('hidden');
+document.getElementById('android-redirect')?.classList.add('hidden');
+document.getElementById('desktop')?.classList.add('hidden');
+document.getElementById('fallback')?.classList.add('hidden');
+document.getElementById('app-shell')?.classList.remove('hidden');
+return;
+}
 
-    <!-- Android redirect fallback (will redirect automatically) -->
-    <div id="android-redirect" class="hidden">
-      <h2>Opening Play Store</h2>
-      <p>If you are not redirected, <a id="play-store-link" class="btn" href="#">Open Play Store</a></p>
-    </div>
 
-    <!-- Desktop / other browsers -->
-    <div id="desktop" class="hidden">
-      <h2>Open MyAgent on your phone</h2>
-      <p>Scan this QR code with your phone camera to open the app page or Play Store.</p>
-      <img id="qr-img" class="qr" alt="QR code" src="" />
-      <p style="margin-top:12px">Or open <a href="https://app.myagent.africa">https://app.myagent.africa</a> on your phone</p>
-    </div>
+// Not installed yet
+if (isiOS()) {
+document.getElementById('ios-install')?.classList.remove('hidden');
+return;
+}
 
-    <!-- Optional: Everything else / fallback UI -->
-    <div id="fallback" class="hidden">
-      <h2>Welcome to MyAgent</h2>
-      <p>We detected an unsupported environment. Try opening on your phone for the best experience.</p>
-    </div>
-  </div>
 
-  <script>
-    // config - replace with your real links
-    const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.myagent.app";
-    const SITE_URL = "https://app.myagent.africa";
+if (isAndroid()) {
+const androidDiv = document.getElementById('android-redirect');
+androidDiv?.classList.remove('hidden');
+const link = document.getElementById('play-store-link');
+link.href = "https://play.google.com/store/apps/details?id=com.myagent.app"; // update package id
+setTimeout(() => { window.location.href = link.href; }, 300);
+return;
+}
 
-     const TARGET_DOMAIN = ""; // set to "https://app.myagent.africa" when you switch to production
-  const GH_PAGES_BASE = "/agent-pwa/"; // keep for testing on your GitHub Pages repo
 
-  // Helpers
-  function isAndroid() {
-    return /Android/i.test(navigator.userAgent);
-  }
-  function isiOS() {
-    return /iPhone|iPad|iPod/i.test(navigator.userAgent)
-      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  }
-  function isMobile() {
-    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  }
+if (!isMobile()) {
+const desktop = document.getElementById('desktop');
+desktop?.classList.remove('hidden');
+const qr = document.getElementById('qr-img');
+const siteUrl = TARGET_DOMAIN || (window.location.origin + GH_PAGES_BASE);
+qr.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(siteUrl);
+qr.onclick = () => window.open(siteUrl, "_blank");
+return;
+}
 
-  function isInStandaloneMode() {
-    // iOS legacy navigator.standalone + modern display-mode media query
-    return (('standalone' in navigator && navigator.standalone)
-      || window.matchMedia('(display-mode: standalone)').matches);
-  }
 
-  // When the app is installed and launched from home screen, force the app to use the canonical root.
-  // This avoids "opened at a specific path" behavior that can happen with Add to Home Screen.
-  // Only redirect if TARGET_DOMAIN is set. Use it when you switch to app.myagent.africa.
-  function ensureCanonicalOnStandalone() {
-    if (!isInStandaloneMode()) return;
-    if (!TARGET_DOMAIN) return; // no redirect during testing
-    try {
-      const current = window.location.href;
-      const target = TARGET_DOMAIN.replace(/\/$/, '') + '/';
-      if (!current.startsWith(target)) {
-        // Use replace to avoid leaving history entry
-        window.location.replace(target);
-      }
-    } catch (e) {
-      console.warn('canonical redirect failed', e);
-    }
-  }
+document.getElementById('fallback')?.classList.remove('hidden');
+})();
 
-  (function branchByPlatform() {
-    // If already running as an installed app, do the canonical redirect check then show app
-    if (isInStandaloneMode()) {
-      ensureCanonicalOnStandalone();
-      // show app UI (do nothing or initialize your app)
-      // For your test page this means hide all instruction sections and show the real app content
-      document.getElementById('ios-install')?.classList.add('hidden');
-      document.getElementById('android-redirect')?.classList.add('hidden');
-      document.getElementById('desktop')?.classList.add('hidden');
-      document.getElementById('fallback')?.classList.remove('hidden'); // or swap in your app shell
-      return;
-    }
 
-    // Not installed yet, show relevant prompts/redirects
-    if (isiOS()) {
-      // show custom iOS instructions
-      document.getElementById('ios-install')?.classList.remove('hidden');
-      return;
-    }
-
-    if (isAndroid()) {
-      // redirect Android users to Play Store (or you could show beforeinstallprompt handler)
-      const androidDiv = document.getElementById('android-redirect');
-      androidDiv?.classList.remove('hidden');
-      const link = document.getElementById('play-store-link');
-      link.href = "https://play.google.com/store/apps/details?id=com.myagent.app"; // update package id
-      setTimeout(() => { window.location.href = link.href; }, 300);
-      return;
-    }
-
-    // Desktop
-    if (!isMobile()) {
-      const desktop = document.getElementById('desktop');
-      desktop?.classList.remove('hidden');
-      const qr = document.getElementById('qr-img');
-      // Use the production URL if set, otherwise use GH pages path for testing
-      const siteUrl = TARGET_DOMAIN || (window.location.origin + GH_PAGES_BASE);
-      qr.src = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(siteUrl);
-      qr.onclick = () => window.open(siteUrl, "_blank");
-      return;
-    }
-
-    // Fallback
-    document.getElementById('fallback')?.classList.remove('hidden');
-  })();
-
-  // Register service worker if available
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      const swPath = (typeof GH_PAGES_BASE === 'string' && GH_PAGES_BASE && !TARGET_DOMAIN)
-        ? GH_PAGES_BASE + 'sw.js' // testing on GH pages
-        : '/sw.js';
-      navigator.serviceWorker.register(swPath).catch(err => {
-        console.warn('SW register failed', err);
-      });
-    });
-  }
+// Register service worker if available
+if ('serviceWorker' in navigator) {
+window.addEventListener('load', () => {
+const swPath = (typeof GH_PAGES_BASE === 'string' && GH_PAGES_BASE && !TARGET_DOMAIN)
+? GH_PAGES_BASE + 'sw.js'
+: '/sw.js';
+navigator.serviceWorker.register(swPath).catch(err => {
+console.warn('SW register failed', err);
+});
+});
+}
 </script>
 </body>
 </html>
