@@ -1,12 +1,10 @@
 // Service Worker for MyAgent PWA
-const CACHE_NAME = 'myagent-v2'; // Changed version to force update
+const CACHE_NAME = 'myagent-v3';
 const PRECACHE_URLS = [
-  '/agent-pwa/',
-  '/agent-pwa/index.html',
-  '/agent-pwa/manifest.json',
-  '/agent-pwa/flutter_bootstrap.js', // Fixed: was flutter.js
-  '/agent-pwa/favicon.png'
-  // Don't precache icons as they might not exist yet
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/flutter_bootstrap.js'
 ];
 
 // Install event - cache core assets
@@ -16,10 +14,9 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('[SW] Precaching assets');
-        return cache.addAll(PRECACHE_URLS);
-      })
-      .catch(err => {
-        console.error('[SW] Precache failed:', err);
+        return cache.addAll(PRECACHE_URLS).catch(err => {
+          console.error('[SW] Precache failed:', err);
+        });
       })
   );
   self.skipWaiting();
@@ -43,51 +40,38 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - let everything pass through (no aggressive caching)
 self.addEventListener('fetch', event => {
-  // Skip cross-origin requests
+  // Skip cross-origin and chrome extension requests
   if (!event.request.url.startsWith(self.location.origin)) {
     return;
   }
 
-  // Skip Chrome extension requests
-  if (event.request.url.includes('chrome-extension://')) {
+  // For navigation requests, always go to network first
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('/index.html');
+      })
+    );
     return;
   }
 
+  // For other requests, network first with cache fallback
   event.respondWith(
-    caches.match(event.request)
-      .then(cachedResponse => {
-        if (cachedResponse) {
-          console.log('[SW] Serving from cache:', event.request.url);
-          return cachedResponse;
+    fetch(event.request)
+      .then(response => {
+        // Cache successful responses
+        if (response && response.status === 200) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseToCache);
+          });
         }
-
-        console.log('[SW] Fetching from network:', event.request.url);
-        return fetch(event.request).then(response => {
-          // Only cache successful responses (not 404s or errors)
-          if (response && response.status === 200 && response.type === 'basic') {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return response;
-        }).catch(err => {
-          console.error('[SW] Fetch failed:', err);
-          // Return a basic offline response for navigation requests
-          if (event.request.mode === 'navigate') {
-            return caches.match('/agent-pwa/index.html');
-          }
-          throw err;
-        });
+        return response;
+      })
+      .catch(() => {
+        return caches.match(event.request);
       })
   );
-});
-
-// Handle messages from clients
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });
